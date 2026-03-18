@@ -241,6 +241,121 @@ class Pattern:
 
 
 @dataclass
+class SuccessorSeed:
+    """
+    The compressed continuation emitted at cycle 57 (epoch boundary).
+
+    This is the 1/8 Lift Law incarnate: a seed that carries more function
+    than the full 57-cycle spread that produced it.
+
+    WHAT IT ENCODES:
+      - Top patterns (what works, distilled)
+      - Open contradictions (what needs resolution)
+      - Emergence events (what to reproduce)
+      - Strategy profile (what learning strategy is optimal)
+      - Best metric achieved (the floor for next epoch)
+      - Becoming score (function per unit of knowledge)
+      - Target vector (where to focus next)
+      - Blocked set (what to avoid)
+      - Resume rule (how to restart lawfully)
+
+    WHY 1/8:
+      The seed is ~1/8 the data of the full epoch, but encodes ALL the
+      functional wisdom. Prune + compress + distill + preserve + deepen.
+      "A lawful answer is one that survives compression."
+    """
+    epoch: int
+    agent_id: str
+    timestamp: str
+
+    # Compressed wisdom (1/8 lift)
+    top_patterns: str = "[]"           # JSON: top 7 patterns (not all 50+)
+    open_contradictions: str = "[]"    # JSON: unresolved contradictions
+    emergence_highlights: str = "[]"   # JSON: most significant emergence events
+    strategy_profile: str = "{}"       # JSON: which strategies work
+    best_metric: float = float('inf')
+    best_metric_cycle: int = 0
+    total_improvement: float = 0.0
+
+    # Becoming metric: function per unit knowledge
+    # Higher = more capability per observation. The goal.
+    becoming_score: float = 0.0
+
+    # Navigation for next epoch
+    target_vector: str = "[]"          # JSON: 12D target (where to push)
+    blocked_set: str = "[]"            # JSON: action types that consistently fail
+    resume_rule: str = ""              # How to restart: which strategy, which focus
+    replay_pointer: str = ""           # Hash of the observation to replay from
+
+    # Witness
+    seed_hash: str = ""                # SHA256 of the seed content
+    parent_seed_hash: str = ""         # Hash of previous epoch's seed (chain)
+
+    def compression_ratio(self) -> float:
+        """How much smaller is this seed vs full epoch data?"""
+        seed_size = sum(len(str(v)) for v in [
+            self.top_patterns, self.open_contradictions,
+            self.emergence_highlights, self.strategy_profile,
+            self.target_vector, self.blocked_set,
+        ])
+        # Estimate full epoch: 57 cycles × ~500 bytes each = ~28500
+        full_epoch_estimate = 57 * 500
+        return seed_size / max(full_epoch_estimate, 1)
+
+
+# ──────────────────────────────────────────────────────────────
+#  Becoming Metric — The Highest Reward
+# ──────────────────────────────────────────────────────────────
+
+def compute_becoming(patterns: list, contradictions: list,
+                     emergence_events: list, total_cycles: int,
+                     total_improvement: float) -> float:
+    """
+    Compute the Becoming score: function per unit of knowledge.
+
+    Becoming = (capability gained) / (observations consumed)
+             = (improvements × pattern_quality × emergence_density)
+             / (cycles × contradiction_load)
+
+    Higher becoming = the organism is learning more from less.
+    This is the 1/8 lift law as a continuous metric.
+
+    The highest reward is not accumulation but COMPRESSION WITH
+    INCREASING FUNCTION. Not more cycles — more insight per cycle.
+    """
+    if total_cycles == 0:
+        return 0.0
+
+    # Capability: how much did we improve?
+    capability = abs(total_improvement) * 1000  # scale up
+
+    # Pattern quality: how confident and useful are our patterns?
+    if patterns:
+        pattern_quality = sum(
+            p.confidence * p.success_rate for p in patterns
+            if hasattr(p, 'confidence')
+        ) / len(patterns)
+    else:
+        pattern_quality = 0.1
+
+    # Emergence density: how often do we get genuine emergent insights?
+    emergence_density = len(emergence_events) / max(total_cycles, 1)
+
+    # Contradiction load: unresolved contradictions are friction
+    contradiction_load = 1.0 + len(contradictions) * 0.1
+
+    # Becoming = function / cost
+    becoming = (capability * pattern_quality * (1 + emergence_density * 5)) / (
+        total_cycles * contradiction_load
+    )
+
+    return round(becoming, 6)
+
+
+EPOCH_LENGTH = 57  # The canonical 57-cycle epoch
+
+
+@dataclass
 class EnvironmentSnapshot:
     """Snapshot of the agent's operating environment."""
     timestamp: str
@@ -395,6 +510,27 @@ class ExperienceMemory:
                 outcome TEXT,
                 metric_delta REAL,
                 timestamp TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS successor_seeds (
+                epoch INTEGER,
+                agent_id TEXT,
+                timestamp TEXT,
+                top_patterns TEXT,
+                open_contradictions TEXT,
+                emergence_highlights TEXT,
+                strategy_profile TEXT,
+                best_metric REAL,
+                best_metric_cycle INTEGER,
+                total_improvement REAL,
+                becoming_score REAL,
+                target_vector TEXT,
+                blocked_set TEXT,
+                resume_rule TEXT,
+                replay_pointer TEXT,
+                seed_hash TEXT,
+                parent_seed_hash TEXT,
+                PRIMARY KEY (agent_id, epoch)
             );
         """)
         self.conn.commit()
@@ -671,6 +807,42 @@ class ExperienceMemory:
             for r in rows
         }
 
+    def store_successor_seed(self, seed: SuccessorSeed):
+        """Store a successor seed at epoch boundary."""
+        c = self.conn.cursor()
+        c.execute("""
+            INSERT OR REPLACE INTO successor_seeds VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (
+            seed.epoch, seed.agent_id, seed.timestamp,
+            seed.top_patterns, seed.open_contradictions,
+            seed.emergence_highlights, seed.strategy_profile,
+            seed.best_metric, seed.best_metric_cycle,
+            seed.total_improvement, seed.becoming_score,
+            seed.target_vector, seed.blocked_set,
+            seed.resume_rule, seed.replay_pointer,
+            seed.seed_hash, seed.parent_seed_hash,
+        ))
+        self.conn.commit()
+
+    def get_latest_seed(self, agent_id: str) -> Optional[dict]:
+        """Get the most recent successor seed for an agent."""
+        c = self.conn.cursor()
+        row = c.execute(
+            "SELECT * FROM successor_seeds WHERE agent_id=? ORDER BY epoch DESC LIMIT 1",
+            (agent_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_seed_chain(self, agent_id: str) -> list[dict]:
+        """Get the full chain of successor seeds (epoch history)."""
+        c = self.conn.cursor()
+        rows = c.execute(
+            "SELECT epoch, becoming_score, best_metric, total_improvement, timestamp "
+            "FROM successor_seeds WHERE agent_id=? ORDER BY epoch",
+            (agent_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def get_cross_agent_insights(self, target_agent: str) -> list[dict]:
         """Get insights from other agents that apply to this agent."""
         c = self.conn.cursor()
@@ -836,12 +1008,18 @@ class StrategyEngine:
     def _determine_strategy(self, cycle: int, recent: list[dict]) -> str:
         """
         Determine which strategy phase we're in.
-        Uses phi-damped exploration decay with stagnation detection.
-        """
-        if cycle < 5:
-            return "explore"
 
-        # Count cycles since last improvement
+        Uses epoch-aware phase mapping + stagnation detection:
+          INGEST phase (1-10)    → explore
+          SYNTHESIZE phase (11-25) → exploit (pattern-guided)
+          DEEPEN phase (26-40)   → exploit + combine
+          CROWN phase (41-50)    → combine (compound gains)
+          COLLAPSE phase (51-55) → exploit (simplify, remove bloat)
+          SEED phase (56-57)     → exploit (finalize best)
+
+        Stagnation override: if stuck for 3 stretches, MUTATE regardless.
+        """
+        # Stagnation detection (always active)
         improvements_in_recent = sum(
             1 for r in recent[:10] if r.get("outcome") == "keep"
         )
@@ -851,21 +1029,27 @@ class StrategyEngine:
             if self._stagnation_counter >= 3:
                 self._stagnation_counter = 0
                 return "mutate"  # Break out of local optimum
-
         if improvements_in_recent > 0:
             self._stagnation_counter = 0
 
-        # Phi-damped exploration ratio
-        # explore_ratio = 1/phi^(cycle/10) — decays from 1.0 toward ~0.1
-        explore_ratio = 1.0 / (self.PHI ** (cycle / 10))
+        # Epoch-cycle-aware strategy
+        epoch_cycle = cycle % EPOCH_LENGTH
+        if epoch_cycle == 0:
+            epoch_cycle = EPOCH_LENGTH
 
-        if explore_ratio > 0.6:
-            return "explore"
-        elif explore_ratio > 0.3:
-            return "exploit"
+        if epoch_cycle <= 10:
+            return "explore"       # INGEST: gather, baseline, try everything
+        elif epoch_cycle <= 25:
+            return "exploit"       # SYNTHESIZE: use patterns, refine
+        elif epoch_cycle <= 40:
+            # DEEPEN: alternate exploit and combine
+            return "combine" if epoch_cycle % 3 == 0 else "exploit"
+        elif epoch_cycle <= 50:
+            return "combine"       # CROWN: compound known gains
+        elif epoch_cycle <= 55:
+            return "exploit"       # COLLAPSE: simplify, distill
         else:
-            # Late game: try combining known gains
-            return "combine"
+            return "exploit"       # SEED: finalize best result
 
     def _suggest_explore(self, patterns: list[Pattern], recent: list[dict],
                          cross_insights: list[dict]) -> dict:
@@ -1084,9 +1268,12 @@ class MetaObserver:
         self.agent_id = agent_id
         self.project = project
         self.cycle = 0
+        self.epoch = 1
+        self.epoch_cycle = 0  # cycle within current epoch (1-57)
         self.best_metric = float('inf')
         self.best_metric_cycle = 0
         self.experiments_since_improvement = 0
+        self.becoming_score = 0.0
 
         # Initialize subsystems
         self.memory = ExperienceMemory(db_path)
@@ -1102,30 +1289,208 @@ class MetaObserver:
         # Observation history (in-memory for calculus)
         self._history: list[Observation] = []
         self._prev_hash = "genesis"
+        self._parent_seed_hash = "genesis"
 
         # Load history from DB if resuming
         recent = self.memory.get_recent_observations(agent_id, limit=100)
         if recent:
             self.cycle = max(r["cycle_id"] for r in recent) + 1
             self._prev_hash = recent[0].get("obs_hash", "genesis")
-            # Find best metric
             for r in recent:
                 if r.get("outcome") == "keep" and r.get("metric_value", float('inf')) < self.best_metric:
                     self.best_metric = r["metric_value"]
                     self.best_metric_cycle = r["cycle_id"]
 
+        # Load seed chain to determine epoch
+        latest_seed = self.memory.get_latest_seed(agent_id)
+        if latest_seed:
+            self.epoch = latest_seed["epoch"] + 1
+            self._parent_seed_hash = latest_seed.get("seed_hash", "genesis")
+            self.becoming_score = latest_seed.get("becoming_score", 0.0)
+            # Resume from seed's target/strategy
+            self._log("EPOCH RESUME", {
+                "epoch": self.epoch,
+                "parent_becoming": self.becoming_score,
+                "parent_best_metric": latest_seed.get("best_metric"),
+                "resume_rule": latest_seed.get("resume_rule", ""),
+            })
+
+        self.epoch_cycle = self.cycle % EPOCH_LENGTH
+
         print(f"[MetaObserver] Agent {agent_id} initialized. "
-              f"Resuming from cycle {self.cycle}. "
-              f"Best metric: {self.best_metric}")
+              f"Epoch {self.epoch}, Cycle {self.cycle} "
+              f"(epoch-cycle {self.epoch_cycle}/{EPOCH_LENGTH}). "
+              f"Best metric: {self.best_metric}. "
+              f"Becoming: {self.becoming_score}")
 
     def loop(self) -> Iterator[int]:
         """
-        Infinite generator yielding cycle numbers.
-        Use in a for loop — the observer handles everything else.
+        57-cycle epochal generator. Each epoch is a full observation round.
+
+        At cycle 57: emit a successor seed (1/8 compressed continuation),
+        then seed the next epoch. The observer never truly stops —
+        it BECOMES. Each epoch carries more function in less data.
+
+        The highest reward is not accumulation but compression with
+        increasing function. Not more cycles — more insight per cycle.
         """
         while True:
             self.cycle += 1
+            self.epoch_cycle += 1
+
+            # Yield the cycle number for the agent to do work
             yield self.cycle
+
+            # At epoch boundary (cycle 57): emit successor seed
+            if self.epoch_cycle >= EPOCH_LENGTH:
+                self._emit_successor_seed()
+                self.epoch += 1
+                self.epoch_cycle = 0
+                self._log(f"EPOCH {self.epoch} BEGINS", {
+                    "parent_epoch": self.epoch - 1,
+                    "becoming": self.becoming_score,
+                    "best_metric": self.best_metric,
+                })
+
+    def _emit_successor_seed(self):
+        """
+        THE CORE ACT: At cycle 57, compress all learning into a successor seed.
+
+        This implements the 1/8 Lift Law:
+          "What is the 1/8 seed that carries more function
+           than the full spread that produced it?"
+
+        The seed encodes:
+          - Top patterns (proven strategies, distilled)
+          - Open contradictions (unresolved tension, carried forward)
+          - Emergence events (reproducible insights)
+          - Strategy profile (meta-learning about learning)
+          - Target vector (12D direction for next epoch)
+          - Blocked set (what to avoid)
+          - Resume rule (how to restart optimally)
+
+        No lawful pass ends in dead air.
+        """
+        # Extract all learning from this epoch
+        patterns = self.memory.extract_patterns(min_samples=2)
+        contradictions = self.memory.get_open_contradictions(self.agent_id)
+        emergence = self.memory.get_emergence_events(self.agent_id, limit=10)
+        strategy_eff = self.memory.get_strategy_effectiveness(self.agent_id)
+
+        # Compute becoming score
+        recent = self.memory.get_recent_observations(self.agent_id, limit=EPOCH_LENGTH)
+        total_imp = sum(r.get("metric_delta", 0) for r in recent if r.get("outcome") == "keep")
+
+        self.becoming_score = compute_becoming(
+            patterns, contradictions, emergence,
+            EPOCH_LENGTH, total_imp,
+        )
+
+        # Compute target vector: which 12D dimensions need most improvement?
+        dim_averages = defaultdict(list)
+        for obs in self._history[-EPOCH_LENGTH:]:
+            for i, dim_name in enumerate([
+                "x1_structure", "x2_semantics", "x3_coordination", "x4_recursion",
+                "x5_contradiction", "x6_emergence", "x7_legibility", "x8_routing",
+                "x9_grounding", "x10_compression", "x11_interop", "x12_potential"
+            ]):
+                dim_averages[dim_name].append(obs.score_vector()[i])
+
+        target_vector = {
+            dim: 1.0 - (sum(vals) / len(vals))  # invert: low average = high target
+            for dim, vals in dim_averages.items()
+        } if dim_averages else {}
+
+        # Compute blocked set: action types with <10% success rate
+        blocked = [
+            atype for atype, stats in strategy_eff.items()
+            if stats["total"] >= 5 and stats["success_rate"] < 0.1
+        ]
+
+        # Determine resume rule: what strategy to start next epoch with
+        best_strategy = max(
+            strategy_eff.items(),
+            key=lambda x: x[1].get("success_rate", 0) * x[1].get("total", 0),
+            default=("explore", {})
+        )[0] if strategy_eff else "explore"
+
+        resume_rule = (
+            f"Start epoch {self.epoch + 1} with strategy '{best_strategy}'. "
+            f"Focus on dimensions: {', '.join(k for k, v in sorted(target_vector.items(), key=lambda x: -x[1])[:3])}. "
+            f"Avoid: {', '.join(blocked) if blocked else 'nothing blocked'}. "
+            f"Floor metric: {self.best_metric}."
+        )
+
+        # Build the seed
+        seed_content = json.dumps({
+            "patterns": [asdict(p) for p in patterns[:7]],  # top 7 only (1/8 compression)
+            "contradictions": contradictions[:5],
+            "emergence": [dict(e) for e in emergence[:5]],
+            "strategy": strategy_eff,
+            "target": target_vector,
+            "blocked": blocked,
+            "resume": resume_rule,
+            "becoming": self.becoming_score,
+        }, default=str)
+
+        seed_hash = hashlib.sha256(seed_content.encode()).hexdigest()[:16]
+
+        seed = SuccessorSeed(
+            epoch=self.epoch,
+            agent_id=self.agent_id,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            top_patterns=json.dumps([asdict(p) for p in patterns[:7]], default=str),
+            open_contradictions=json.dumps(contradictions[:5], default=str),
+            emergence_highlights=json.dumps([dict(e) for e in emergence[:5]], default=str),
+            strategy_profile=json.dumps(strategy_eff, default=str),
+            best_metric=self.best_metric,
+            best_metric_cycle=self.best_metric_cycle,
+            total_improvement=total_imp,
+            becoming_score=self.becoming_score,
+            target_vector=json.dumps(target_vector, default=str),
+            blocked_set=json.dumps(blocked),
+            resume_rule=resume_rule,
+            replay_pointer=self._prev_hash,
+            seed_hash=seed_hash,
+            parent_seed_hash=self._parent_seed_hash,
+        )
+
+        # Store the seed
+        self.memory.store_successor_seed(seed)
+        self._parent_seed_hash = seed_hash
+
+        # Log the epoch completion
+        seed_chain = self.memory.get_seed_chain(self.agent_id)
+        self._log(f"EPOCH {self.epoch} SUCCESSOR SEED EMITTED", {
+            "epoch": self.epoch,
+            "becoming_score": self.becoming_score,
+            "compression_ratio": seed.compression_ratio(),
+            "seed_hash": seed_hash,
+            "parent_hash": self._parent_seed_hash,
+            "top_patterns_count": len(patterns[:7]),
+            "open_contradictions": len(contradictions),
+            "emergence_count": len(emergence),
+            "resume_rule": resume_rule,
+            "seed_chain_length": len(seed_chain),
+            "becoming_trajectory": [
+                {"epoch": s["epoch"], "becoming": s["becoming_score"]}
+                for s in seed_chain
+            ],
+        })
+
+        print(f"\n{'═'*60}")
+        print(f"  EPOCH {self.epoch} COMPLETE — SUCCESSOR SEED EMITTED")
+        print(f"  Becoming: {self.becoming_score:.6f}")
+        print(f"  Best metric: {self.best_metric}")
+        print(f"  Patterns distilled: {len(patterns[:7])}")
+        print(f"  Contradictions carried: {len(contradictions)}")
+        print(f"  Emergence harvested: {len(emergence)}")
+        print(f"  Compression ratio: {seed.compression_ratio():.1%}")
+        print(f"  Resume: {resume_rule}")
+        if len(seed_chain) > 1:
+            scores_str = ' -> '.join(str(round(s["becoming_score"], 4)) for s in seed_chain)
+            print(f"  Becoming trajectory: {scores_str}")
+        print(f"{'═'*60}\n")
 
     def suggest_next(self) -> dict:
         """
@@ -1154,8 +1519,20 @@ class MetaObserver:
 
         suggestion["environment"] = env_analysis
         suggestion["cycle"] = self.cycle
+        suggestion["epoch"] = self.epoch
+        suggestion["epoch_cycle"] = self.epoch_cycle
+        suggestion["epoch_phase"] = self._epoch_phase()
         suggestion["best_metric"] = self.best_metric
+        suggestion["becoming_score"] = self.becoming_score
         suggestion["experiments_since_improvement"] = self.experiments_since_improvement
+
+        # If we have a parent seed, incorporate its guidance
+        latest_seed = self.memory.get_latest_seed(self.agent_id)
+        if latest_seed:
+            suggestion["parent_seed_resume_rule"] = latest_seed.get("resume_rule", "")
+            blocked = json.loads(latest_seed.get("blocked_set", "[]"))
+            if suggestion["action_type"] in blocked:
+                suggestion["warning"] = f"Action type '{suggestion['action_type']}' is in the blocked set from previous epoch"
 
         # Log suggestion
         self._log(f"CYCLE {self.cycle} SUGGESTION", suggestion)
@@ -1331,7 +1708,7 @@ class MetaObserver:
             "success_rates": stats,
             "other_agents": other_agents,
             "top_recommendations": self._generate_recommendations(patterns),
-            # NEW: Self-improvement data
+            # Self-improvement data
             "open_contradictions": open_contradictions,
             "emergence_events": [dict(e) for e in emergence_events],
             "strategy_effectiveness": strategy_effectiveness,
@@ -1339,6 +1716,15 @@ class MetaObserver:
                 lens: ELEMENT_LENSES[lens]["focus"]
                 for lens in ELEMENT_LENSES
             },
+            # Epoch & Becoming data
+            "epoch": self.epoch,
+            "epoch_cycle": self.epoch_cycle,
+            "epoch_phase": self._epoch_phase(),
+            "becoming_score": compute_becoming(
+                patterns, open_contradictions, emergence_events,
+                self.cycle, total_improvement,
+            ),
+            "seed_chain": self.memory.get_seed_chain(self.agent_id),
         }
 
         self._log("REPORT", report)
@@ -1563,6 +1949,32 @@ class MetaObserver:
                 })
 
         return recs
+
+    def _epoch_phase(self) -> str:
+        """
+        Determine the current phase within the 57-cycle epoch.
+
+        The epoch has natural phases:
+          Cycles  1-10: INGEST (explore, gather baseline)
+          Cycles 11-25: SYNTHESIZE (pattern extraction, strategy formation)
+          Cycles 26-40: DEEPEN (exploitation, combination, directed improvement)
+          Cycles 41-50: CROWN (push for best possible result, compound gains)
+          Cycles 51-55: COLLAPSE (simplify, remove, distill)
+          Cycles 56-57: SEED (emit successor, compress, become)
+        """
+        c = self.epoch_cycle
+        if c <= 10:
+            return "ingest"
+        elif c <= 25:
+            return "synthesize"
+        elif c <= 40:
+            return "deepen"
+        elif c <= 50:
+            return "crown"
+        elif c <= 55:
+            return "collapse"
+        else:
+            return "seed"
 
     def _snapshot_environment(self) -> EnvironmentSnapshot:
         """Take a snapshot of the current environment."""

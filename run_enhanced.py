@@ -167,10 +167,21 @@ def run_experiment(observer: MetaObserver, best_bpb: float,
 
     # Get suggestion from meta-observer
     suggestion = observer.suggest_next()
+    epoch = suggestion.get('epoch', '?')
+    epoch_cycle = suggestion.get('epoch_cycle', '?')
+    phase = suggestion.get('epoch_phase', '?')
+    becoming = suggestion.get('becoming_score', 0)
+
     print(f"\n{'='*60}")
-    print(f"CYCLE {cycle} | Strategy: {suggestion['strategy']} | "
-          f"Suggested: {suggestion['action_type']}")
+    print(f"CYCLE {cycle} | Epoch {epoch}:{epoch_cycle}/57 | Phase: {phase}")
+    print(f"Strategy: {suggestion['strategy']} | Suggested: {suggestion['action_type']}")
     print(f"Reasoning: {suggestion['reasoning']}")
+    if becoming > 0:
+        print(f"Becoming: {becoming:.6f}")
+    if suggestion.get("parent_seed_resume_rule"):
+        print(f"Seed guidance: {suggestion['parent_seed_resume_rule'][:100]}")
+    if suggestion.get("warning"):
+        print(f"WARNING: {suggestion['warning']}")
     if suggestion.get("cross_agent_insights"):
         for ci in suggestion["cross_agent_insights"]:
             print(f"  Cross-agent [{ci['from']}]: {ci['insight']}")
