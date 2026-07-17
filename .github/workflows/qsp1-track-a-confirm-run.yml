@@ -1,0 +1,115 @@
+name: qsp1-track-a-confirmatory-av1
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/qsp1-track-a-confirm-run.yml'
+      - 'qsp1_track_a_confirm/corpus_manifest.json'
+      - 'qsp1_track_a_confirm/corpus_registry.json'
+      - 'qsp1_track_a_confirm/policy.json'
+      - 'qsp1_track_a_confirm/acquire_locked.py'
+      - 'qsp1_track_a_confirm/features.py'
+      - 'qsp1_track_a_confirm/ivf_payload_hash.py'
+      - 'qsp1_track_a_confirm/encode_confirm.sh'
+      - 'qsp1_track_a_confirm/validate_receipts.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qsp1-track-a-confirmatory-av1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  confirm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg time
+          python -m pip install numpy
+      - name: Reacquire locked corpus
+        run: |
+          rm -rf /tmp/qsp1-track-a-confirm-v3
+          python qsp1_track_a_confirm/acquire_locked.py \
+            --manifest qsp1_track_a_confirm/corpus_manifest.json \
+            --registry qsp1_track_a_confirm/corpus_registry.json \
+            --output-dir /tmp/qsp1-track-a-confirm-v3
+      - name: Compute frozen features and verify calibration routes
+        run: |
+          mkdir -p qsp1_track_a_confirm/out
+          python qsp1_track_a_confirm/features.py \
+            --lock /tmp/qsp1-track-a-confirm-v3/corpus_lock.json \
+            --policy qsp1_track_a_confirm/policy.json \
+            --output qsp1_track_a_confirm/out/features.json
+      - name: Execute 576 deterministic encodes
+        id: matrix
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          chmod +x qsp1_track_a_confirm/encode_confirm.sh
+          points=qsp1_track_a_confirm/out/points.tsv
+          work=/tmp/qsp1-track-a-confirm-work
+          printf 'clip_id\tsplit\tconfig\tcrf\ttrial\tbytes\tpayload_bytes\tbitrate_kbps\tencode_seconds\tpsnr_y_db\tssim_y\tdecoded_frames\tpayload_frames\tpayload_sha256\tdecoded_sha256\tmetric_warning_count\n' > "$points"
+          python - <<'PY' > /tmp/qsp1-confirm-clips.tsv
+          import json
+          lock=json.load(open('/tmp/qsp1-track-a-confirm-v3/corpus_lock.json'))
+          for x in lock['clips']:
+              print(x['id'],x['split'],x['canonical_path'],sep='\t')
+          PY
+          while IFS=$'\t' read -r clip split source; do
+            rate=$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of default=nw=1:nk=1 "$source")
+            fps=$(python -c 'import sys; a,b=sys.argv[1].split("/"); print(float(a)/float(b))' "$rate")
+            for config in baseline_fast complexity_aq quality_slow screen_tools; do
+              for crf in 24 30 36 42; do
+                for trial in 1 2 3; do
+                  echo "[confirmatory] $clip $config CRF $crf trial $trial"
+                  bash qsp1_track_a_confirm/encode_confirm.sh "$clip" "$split" "$source" "$fps" "$config" "$crf" 72 "$trial" "$work" "$points" qsp1_track_a_confirm/ivf_payload_hash.py
+                done
+              done
+            done
+          done < /tmp/qsp1-confirm-clips.tsv
+      - name: Capture partial row count
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('qsp1_track_a_confirm/out/points.tsv')
+          rows=max(0,sum(1 for _ in p.open())-1) if p.exists() else 0
+          Path('qsp1_track_a_confirm/out/partial.json').write_text(json.dumps({'rows':rows},indent=2)+'\n')
+          PY
+      - name: Validate deterministic receipts
+        if: ${{ steps.matrix.outcome == 'success' }}
+        run: |
+          python qsp1_track_a_confirm/validate_receipts.py \
+            --points qsp1_track_a_confirm/out/points.tsv \
+            --features qsp1_track_a_confirm/out/features.json \
+            --manifest qsp1_track_a_confirm/corpus_manifest.json \
+            --registry qsp1_track_a_confirm/corpus_registry.json \
+            --policy qsp1_track_a_confirm/policy.json \
+            --output qsp1_track_a_confirm/out/execution_receipt.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qsp1-track-a-confirmatory-av1
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          path: |
+            qsp1_track_a_confirm/out
+            /tmp/qsp1-track-a-confirm-v3/corpus_lock.json
+            /tmp/qsp1-track-a-confirm-v3/canonical
+            /tmp/qsp1-track-a-confirm-work
+      - name: Enforce complete matrix
+        if: always()
+        run: |
+          test '${{ steps.matrix.outcome }}' = success
+          test -f qsp1_track_a_confirm/out/execution_receipt.json

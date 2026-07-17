@@ -1,0 +1,13 @@
+name: qsp1-track-a-confirmatory-freeze-locked
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  locked:
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Corpus registry is already frozen; Stage 2 must verify the committed hashes.'

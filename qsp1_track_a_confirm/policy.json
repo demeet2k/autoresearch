@@ -1,0 +1,39 @@
+{
+  "ablation_semantics": {
+    "always_baseline": "select baseline_fast for every clip",
+    "full": "apply all frozen policy rules in order",
+    "no_dls": "ignore dls_coherence while preserving repeat, temporal, entropy, and fallback rules",
+    "no_entropy": "skip the entropy_bits rule while preserving structural and temporal rules",
+    "no_temporal": "skip the temporal_mad rule while preserving structural and entropy rules",
+    "offline_oracle_non_deployable": "per clip, choose the configuration with the lowest sum of pointwise bytes among configurations passing both quality floors at all four CRF points; ties use configuration name"
+  },
+  "ablations": ["full","always_baseline","no_dls","no_temporal","no_entropy","offline_oracle_non_deployable"],
+  "baseline": "baseline_fast",
+  "calibration_route_expectation": {"akiyo":"screen_tools","bus":"complexity_aq","container":"quality_slow","foreman":"baseline_fast"},
+  "configs": {
+    "baseline_fast": ["-cpu-used","8","-aq-mode","1","-tune","psnr"],
+    "complexity_aq": ["-cpu-used","8","-aq-mode","2","-tune","psnr"],
+    "quality_slow": ["-cpu-used","6","-aq-mode","1","-tune","psnr"],
+    "screen_tools": ["-cpu-used","8","-aq-mode","1","-tune","psnr","-enable-intrabc","1","-enable-palette","1"]
+  },
+  "elementary_stream": {"determinism_requirement":"all three trials must have identical payload SHA-256","format":"ivf","hash":"SHA-256 over concatenated AV1 frame payload bytes, excluding IVF file and frame headers"},
+  "frozen_at_utc": "2026-07-17T02:10:00Z",
+  "metric_normalization": {"color_matrix":"smpte170m","format":"yuv420p","range":"limited","timebase":"AVTB","timestamps":"N/(fps*TB)"},
+  "policy_id": "qshrink-track-a-confirmatory-20260717-v3",
+  "policy_rules": [
+    {"if":"dls_coherence >= 0.25 OR repeat_ratio >= 0.02","select":"screen_tools"},
+    {"if":"temporal_mad >= 12.0","select":"complexity_aq"},
+    {"if":"entropy_bits <= 6.85","select":"quality_slow"},
+    {"else":"baseline_fast"}
+  ],
+  "primary_trial": 1,
+  "promotion_rule": "mean PSNR-Y BD-rate < 0 and mean SSIM-Y BD-rate < 0 with at least 4/6 clips non-positive on both metrics; report attribution separately",
+  "promotion_split": "novel_heldout",
+  "quality_floor": {"psnr_y_db_below_baseline_max":0.1,"ssim_y_below_baseline_max":0.001},
+  "rate_points_crf": [24,30,36,42],
+  "retuning_after_new_corpus_acquisition": false,
+  "row_mt": 1,
+  "schema": "qshrink.track-a-confirmatory-policy/v1",
+  "threads": 2,
+  "trials": 3
+}
