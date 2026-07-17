@@ -26,6 +26,8 @@ jobs:
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Freeze corpus identities
+        id: freeze
+        continue-on-error: true
         run: |
           mkdir -p qsp1_track_a_confirm/out
           python qsp1_track_a_confirm/freeze_corpus.py \
@@ -33,9 +35,18 @@ jobs:
             --output-dir /tmp/qsp1-track-a-confirm-v3 \
             --registry-out qsp1_track_a_confirm/out/corpus_registry.candidate.json \
             --receipt-out qsp1_track_a_confirm/out/freeze_receipt.json \
-            > qsp1_track_a_confirm/out/freeze.log
-      - name: Verify acquisition-only receipt
+            > qsp1_track_a_confirm/out/freeze.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qsp1-track-a-confirmatory-freeze
+          if-no-files-found: error
+          retention-days: 30
+          path: qsp1_track_a_confirm/out
+      - name: Enforce acquisition-only receipt
+        if: always()
         run: |
+          test '${{ steps.freeze.outcome }}' = success
           python - <<'PY'
           import json
           from pathlib import Path
@@ -45,9 +56,3 @@ jobs:
           assert r['new_heldout_count']==6
           assert r['benchmark_executed'] is False
           PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: qsp1-track-a-confirmatory-freeze
-          if-no-files-found: error
-          retention-days: 30
-          path: qsp1_track_a_confirm/out
