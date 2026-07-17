@@ -1,0 +1,115 @@
+name: qsp1-track-a-public-av1-matrix
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/qsp1-track-a-public-av1.yml'
+      - 'qsp1_track_a/**'
+  workflow_dispatch:
+
+concurrency:
+  group: qsp1-track-a-public-av1-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install standard AV1 runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg time
+          ffmpeg -hide_banner -version
+      - name: Acquire and verify locked public corpus
+        run: |
+          set -euo pipefail
+          python qsp1_track_a/corpus.py \
+            --manifest qsp1_track_a/corpus_manifest.json \
+            --registry qsp1_track_a/corpus_registry.json \
+            --output /tmp/qsp1-track-a-corpus \
+            > qsp1_track_a/acquisition_receipt.json
+      - name: Execute fixed 96-point AV1 matrix
+        run: |
+          set -euo pipefail
+          work=/tmp/qsp1-track-a-av1
+          points=qsp1_track_a/points.tsv
+          printf 'clip_id\tconfig\tcrf\tbytes\tbitrate_kbps\tencode_seconds\tpsnr_y_db\tssim_y\tdecoded_frames\tbitstream_sha256\tdecoded_sha256\n' > "$points"
+          python - <<'PY' > /tmp/qsp1-clips.tsv
+          import json
+          lock=json.load(open('/tmp/qsp1-track-a-corpus/corpus_lock.json'))
+          for item in lock['clips']:
+              print(item['id'], item['canonical_path'], sep='\t')
+          PY
+          while IFS=$'\t' read -r clip source; do
+            rate=$(ffprobe -v error -select_streams v:0 -show_entries stream=avg_frame_rate -of default=nw=1:nk=1 "$source")
+            fps=$(python -c 'import sys; a,b=sys.argv[1].split("/"); print(float(a)/float(b))' "$rate")
+            for config in baseline_fast complexity_aq quality_slow screen_tools; do
+              for crf in 24 30 36 42; do
+                echo "[public-track-a] $clip $config CRF $crf"
+                bash qsp1_track_a/encode_one.sh "$clip" "$source" "$fps" "$config" "$crf" 72 "$work" "$points"
+              done
+            done
+          done < /tmp/qsp1-clips.tsv
+          test "$(($(wc -l < "$points") - 1))" = 96
+      - name: Capture partial matrix evidence
+        if: always()
+        run: |
+          rows=0
+          if test -f qsp1_track_a/points.tsv; then
+            rows=$(($(wc -l < qsp1_track_a/points.tsv) - 1))
+          fi
+          printf '{"status":"UNANALYZED","actual_encode_count":%s,"expected_encode_count":96}\n' "$rows" > qsp1_track_a/partial_receipt.json
+      - name: Build execution receipt
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, time
+          from pathlib import Path
+          def digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+          points=Path('qsp1_track_a/points.tsv')
+          receipt={
+            'schema':'qshrink.track-a-public-matrix/v1',
+            'status':'COMPLETE',
+            'generated_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+            'benchmark_id':'xiph-derf-qcif-six-v2',
+            'clip_count':6,
+            'frames_per_clip':72,
+            'config_count':4,
+            'rate_point_count':4,
+            'expected_encode_count':96,
+            'actual_encode_count':sum(1 for _ in points.open())-1,
+            'manifest_sha256':digest('qsp1_track_a/corpus_manifest.json'),
+            'registry_projection_sha256':digest('qsp1_track_a/corpus_registry.json'),
+            'source_registry_sha256':'1ac02df7c4e7f8721d43a9be35a3c987b4d2cbb451b0b277c446ffbb8b6b3d96',
+            'corpus_script_sha256':digest('qsp1_track_a/corpus.py'),
+            'encoder_script_sha256':digest('qsp1_track_a/encode_one.sh'),
+            'points_sha256':digest(points),
+            'claim_status':'UNANALYZED_NUMERIC_RECEIPTS'
+          }
+          Path('qsp1_track_a/execution_receipt.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          assert receipt['actual_encode_count']==receipt['expected_encode_count']
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qsp1-track-a-public-av1-matrix
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 0
+          path: |
+            qsp1_track_a/points.tsv
+            qsp1_track_a/partial_receipt.json
+            qsp1_track_a/execution_receipt.json
+            qsp1_track_a/acquisition_receipt.json
+            /tmp/qsp1-track-a-corpus/corpus_lock.json
+            /tmp/qsp1-track-a-corpus/canonical
+            /tmp/qsp1-track-a-av1
