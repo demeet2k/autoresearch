@@ -60,6 +60,14 @@ jobs:
             done
           done < /tmp/qsp1-clips.tsv
           test "$(($(wc -l < "$points") - 1))" = 96
+      - name: Capture partial matrix evidence
+        if: always()
+        run: |
+          rows=0
+          if test -f qsp1_track_a/points.tsv; then
+            rows=$(($(wc -l < qsp1_track_a/points.tsv) - 1))
+          fi
+          printf '{"status":"UNANALYZED","actual_encode_count":%s,"expected_encode_count":96}\n' "$rows" > qsp1_track_a/partial_receipt.json
       - name: Build execution receipt
         run: |
           set -euo pipefail
@@ -91,13 +99,15 @@ jobs:
           assert receipt['actual_encode_count']==receipt['expected_encode_count']
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: qsp1-track-a-public-av1-matrix
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
           compression-level: 0
           path: |
             qsp1_track_a/points.tsv
+            qsp1_track_a/partial_receipt.json
             qsp1_track_a/execution_receipt.json
             qsp1_track_a/acquisition_receipt.json
             /tmp/qsp1-track-a-corpus/corpus_lock.json
