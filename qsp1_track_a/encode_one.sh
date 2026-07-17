@@ -4,6 +4,8 @@ clip_id="$1"; source_y4m="$2"; fps="$3"; config="$4"; crf="$5"; frames="$6"; wor
 mkdir -p "$work/$clip_id"
 out="$work/$clip_id/${config}.crf${crf}.mkv"
 time_file="$work/$clip_id/${config}.crf${crf}.time"
+encode_log="$work/$clip_id/${config}.crf${crf}.encode.log"
+rc_file="$work/$clip_id/${config}.crf${crf}.encode.rc"
 case "$config" in
   baseline_fast) profile=(-cpu-used 8 -aq-mode 1 -tune psnr) ;;
   complexity_aq) profile=(-cpu-used 8 -aq-mode 2 -tune psnr) ;;
@@ -11,7 +13,14 @@ case "$config" in
   screen_tools) profile=(-cpu-used 8 -aq-mode 1 -tune psnr -enable-intrabc 1 -enable-palette 1) ;;
   *) echo "unknown fixed profile: $config" >&2; exit 2 ;;
 esac
-/usr/bin/time -f '%e' -o "$time_file" ffmpeg -hide_banner -loglevel error -y -i "$source_y4m" -map 0:v:0 -frames:v "$frames" -an -c:v libaom-av1 -usage good -crf "$crf" -b:v 0 -row-mt 1 -threads 2 -g "$frames" "${profile[@]}" -pix_fmt yuv420p "$out"
+set +e
+/usr/bin/time -f '%e' -o "$time_file" ffmpeg -hide_banner -loglevel error -y -i "$source_y4m" -map 0:v:0 -frames:v "$frames" -an -c:v libaom-av1 -usage good -crf "$crf" -b:v 0 -row-mt 1 -threads 2 -g "$frames" "${profile[@]}" -pix_fmt yuv420p "$out" 2> "$encode_log"
+rc=$?
+set -e
+printf '%s\n' "$rc" > "$rc_file"
+if (( rc != 0 )); then
+  exit "$rc"
+fi
 seconds=$(cat "$time_file")
 bytes=$(stat -c%s "$out")
 bitrate=$(python -c 'import sys; print(float(sys.argv[1])*8.0/(float(sys.argv[2])/float(sys.argv[3]))/1000.0)' "$bytes" "$frames" "$fps")
