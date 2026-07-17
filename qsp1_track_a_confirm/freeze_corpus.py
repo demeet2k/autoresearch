@@ -41,7 +41,7 @@ def main()->int:
     raw=a.output_dir/'raw'; can=a.output_dir/'canonical'; entries=[]
     for c in m['clips']:
         cid=c['id']; src=raw/c['filename']; dst=can/f'{cid}.{frames}f.limited.y4m'
-        download(c['url'],src); canonicalize(src,dst,frames)
+        download(c['url'],src); canonicalize(src,dst,frames,filt)
         sp=probe(src); cp=probe(dst); count=int(cp.get('nb_read_frames','0'))
         if count!=frames: raise RuntimeError(f'{cid}: {count} frames != {frames}')
         entries.append({'id':cid,'split':c['split'],'url':c['url'],'filename':c['filename'],'source_bytes':src.stat().st_size,'canonical_bytes':dst.stat().st_size,'source_sha256':sha256(src),'canonical_sha256':sha256(dst),'source_probe':sp,'canonical_probe':cp,'frames':frames})
