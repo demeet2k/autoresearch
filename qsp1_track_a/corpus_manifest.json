@@ -1,0 +1,70 @@
+{
+  "schema": "qshrink.track-a-corpus/v1",
+  "benchmark_id": "xiph-derf-qcif-six-v2",
+  "frozen_at_utc": "2026-07-16T21:10:00Z",
+  "source_collection": {
+    "name": "Xiph.org Derf test media collection",
+    "collection_url": "https://media.xiph.org/video/derf/",
+    "redistribution_note": "Use is subject to the source collection and any per-file notices. This package stores URLs and hashes, not the public media bytes."
+  },
+  "canonicalization": {
+    "frames": 72,
+    "pixel_format": "yuv420p",
+    "preserve_source_resolution": true,
+    "preserve_source_frame_rate": true,
+    "audio": "discard",
+    "container": "yuv4mpegpipe",
+    "filters": "format=yuv420p",
+    "source_hash_lock": "SHA-256 recorded on first successful acquisition; benchmark refuses an incomplete lock",
+    "revision_note": "v1 requested 96 frames, but the preregistered bus source contains only 75. Before any codec execution or performance observation, v2 lowered the common canonical length to 72 frames."
+  },
+  "splits": {
+    "calibration": ["akiyo", "bus"],
+    "validation": ["container", "foreman"],
+    "heldout": ["soccer", "news"]
+  },
+  "clips": [
+    {
+      "id": "akiyo",
+      "split": "calibration",
+      "url": "https://media.xiph.org/video/derf/y4m/akiyo_qcif.y4m",
+      "filename": "akiyo_qcif.y4m",
+      "source_sha256": null
+    },
+    {
+      "id": "bus",
+      "split": "calibration",
+      "url": "https://media.xiph.org/video/derf/y4m/bus_qcif_15fps.y4m",
+      "filename": "bus_qcif_15fps.y4m",
+      "source_sha256": null
+    },
+    {
+      "id": "container",
+      "split": "validation",
+      "url": "https://media.xiph.org/video/derf/y4m/container_qcif.y4m",
+      "filename": "container_qcif.y4m",
+      "source_sha256": null
+    },
+    {
+      "id": "foreman",
+      "split": "validation",
+      "url": "https://media.xiph.org/video/derf/y4m/foreman_qcif.y4m",
+      "filename": "foreman_qcif.y4m",
+      "source_sha256": null
+    },
+    {
+      "id": "soccer",
+      "split": "heldout",
+      "url": "https://media.xiph.org/video/derf/y4m/soccer_qcif_15fps.y4m",
+      "filename": "soccer_qcif_15fps.y4m",
+      "source_sha256": null
+    },
+    {
+      "id": "news",
+      "split": "heldout",
+      "url": "https://media.xiph.org/video/derf/y4m/news_qcif.y4m",
+      "filename": "news_qcif.y4m",
+      "source_sha256": null
+    }
+  ]
+}
