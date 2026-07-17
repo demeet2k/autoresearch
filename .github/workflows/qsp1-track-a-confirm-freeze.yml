@@ -1,58 +1,13 @@
-name: qsp1-track-a-confirmatory-freeze
+name: qsp1-track-a-confirmatory-freeze-locked
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/qsp1-track-a-confirm-freeze.yml'
-      - 'qsp1_track_a_confirm/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: qsp1-track-a-confirmatory-freeze-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  freeze:
+  locked:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - name: Freeze corpus identities
-        id: freeze
-        continue-on-error: true
-        run: |
-          mkdir -p qsp1_track_a_confirm/out
-          python qsp1_track_a_confirm/freeze_corpus.py \
-            --manifest qsp1_track_a_confirm/corpus_manifest.json \
-            --output-dir /tmp/qsp1-track-a-confirm-v3 \
-            --registry-out qsp1_track_a_confirm/out/corpus_registry.candidate.json \
-            --receipt-out qsp1_track_a_confirm/out/freeze_receipt.json \
-            > qsp1_track_a_confirm/out/freeze.log 2>&1
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: qsp1-track-a-confirmatory-freeze
-          if-no-files-found: error
-          retention-days: 30
-          path: qsp1_track_a_confirm/out
-      - name: Enforce acquisition-only receipt
-        if: always()
-        run: |
-          test '${{ steps.freeze.outcome }}' = success
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          r=json.loads(Path('qsp1_track_a_confirm/out/freeze_receipt.json').read_text())
-          assert r['status']=='COMPLETE'
-          assert r['clip_count']==12
-          assert r['new_heldout_count']==6
-          assert r['benchmark_executed'] is False
-          PY
+      - run: echo 'Corpus registry is already frozen; Stage 2 must verify the committed hashes.'
