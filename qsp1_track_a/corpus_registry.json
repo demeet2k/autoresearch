@@ -1,0 +1,76 @@
+{
+  "benchmark_id": "xiph-derf-qcif-six-v2",
+  "clips": [
+    {
+      "canonical_bytes": 2737652,
+      "canonical_sha256": "69de669a64fa1c0d62f4231b65cc7d4c9b74e37b3637281addb1a28f5248bc69",
+      "filename": "akiyo_qcif.y4m",
+      "frames": 72,
+      "id": "akiyo",
+      "source_bytes": 11406644,
+      "source_sha256": "df88d83cbf6d99f3ec41f2c1fd2e67665d2a71ff8caa08f8b6bc46bf4567ea2e",
+      "split": "calibration",
+      "url": "https://media.xiph.org/video/derf/y4m/akiyo_qcif.y4m"
+    },
+    {
+      "canonical_bytes": 2737646,
+      "canonical_sha256": "82b3b7311910b98642d21c678f39a53a236c544dd38e905eda54cbb44f82f2e9",
+      "filename": "bus_qcif_15fps.y4m",
+      "frames": 72,
+      "id": "bus",
+      "source_bytes": 2851688,
+      "source_sha256": "868fc3446d37d0c6959a48b68906486bd64788b2e795f0e29613cbb1fa73480e",
+      "split": "calibration",
+      "url": "https://media.xiph.org/video/derf/y4m/bus_qcif_15fps.y4m"
+    },
+    {
+      "canonical_bytes": 2737652,
+      "canonical_sha256": "6ad8b5e8ab3424f06e29b1d8d407d972aff2975fb6b02eb4f7c4d8d5e41bf817",
+      "filename": "container_qcif.y4m",
+      "frames": 72,
+      "id": "container",
+      "source_bytes": 11406644,
+      "source_sha256": "dcb97fbd0a93d4f95eba39854d1f10fb757cd8acf9c2c06caeafa8884fc83a4b",
+      "split": "validation",
+      "url": "https://media.xiph.org/video/derf/y4m/container_qcif.y4m"
+    },
+    {
+      "canonical_bytes": 2737652,
+      "canonical_sha256": "85993acc598f22774f6558d5755f7e7836e442d288df36adb950c9bf1ea8ed84",
+      "filename": "foreman_qcif.y4m",
+      "frames": 72,
+      "id": "foreman",
+      "source_bytes": 11406644,
+      "source_sha256": "9b37e95ae2d06b3b173d6130965f450009216084bae12b2025248814baf057af",
+      "split": "validation",
+      "url": "https://media.xiph.org/video/derf/y4m/foreman_qcif.y4m"
+    },
+    {
+      "canonical_bytes": 2737646,
+      "canonical_sha256": "b2676295f16338ad0ac3d6ab18b2efa4b3e3bcd3f59d70aea4a4482f1e00a14d",
+      "filename": "soccer_qcif_15fps.y4m",
+      "frames": 72,
+      "id": "soccer",
+      "source_bytes": 5703338,
+      "source_sha256": "6cd961a770b7ebd7856f2982aa71a8cb6c821fdb0edc0a62fa676b2a3c24dc79",
+      "split": "heldout",
+      "url": "https://media.xiph.org/video/derf/y4m/soccer_qcif_15fps.y4m"
+    },
+    {
+      "canonical_bytes": 2737652,
+      "canonical_sha256": "4f8d637c0eb2af0d904f5df5fc6610a0cafc1e5b11bba2142077e8e36336367d",
+      "filename": "news_qcif.y4m",
+      "frames": 72,
+      "id": "news",
+      "source_bytes": 11406644,
+      "source_sha256": "98e4d83bc8db885eaf52eabeb5aa8c4f6d891c16037541970dce098753167ae4",
+      "split": "heldout",
+      "url": "https://media.xiph.org/video/derf/y4m/news_qcif.y4m"
+    }
+  ],
+  "complete": true,
+  "manifest_sha256": "5302ad1312c0aa12657c9512dabffb0e1ea25d5e3177c7bdbcadae9b1195a043",
+  "schema": "qshrink.track-a-public-registry-projection/v1",
+  "source_registry_sha256": "1ac02df7c4e7f8721d43a9be35a3c987b4d2cbb451b0b277c446ffbb8b6b3d96",
+  "status": "LOCKED"
+}
