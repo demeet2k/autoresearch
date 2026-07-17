@@ -28,7 +28,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y ffmpeg time
-          ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libaom_av1
+          ffmpeg -hide_banner -encoders 2>/dev/null | grep -F libaom_av1 >/dev/null
       - name: Acquire and verify locked public corpus
         run: |
           set -euo pipefail
