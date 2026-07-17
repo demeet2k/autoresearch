@@ -1,0 +1,38 @@
+{
+  "schema": "qshrink.track-a-confirmatory-corpus/v1",
+  "benchmark_id": "xiph-derf-qcif-confirmatory-twelve-v3",
+  "frozen_at_utc": "2026-07-17T02:10:00Z",
+  "source_collection": {
+    "name": "Xiph.org Derf test media collection",
+    "collection_url": "https://media.xiph.org/video/derf/y4m/"
+  },
+  "canonicalization": {
+    "frames": 72,
+    "pixel_format": "yuv420p",
+    "range": "limited",
+    "color_matrix": "smpte170m",
+    "audio": "discard",
+    "container": "yuv4mpegpipe",
+    "filter": "scale=in_range=auto:out_range=tv,format=yuv420p,setrange=limited",
+    "timebase_normalization": "metrics set both inputs to AVTB and setpts=N/(fps*TB)"
+  },
+  "splits": {
+    "calibration": ["akiyo", "bus", "container", "foreman"],
+    "legacy_check": ["news", "soccer"],
+    "novel_heldout": ["carphone", "coastguard", "hall_monitor", "mobile", "mother_daughter", "silent"]
+  },
+  "clips": [
+    {"id":"akiyo","split":"calibration","url":"https://media.xiph.org/video/derf/y4m/akiyo_qcif.y4m","filename":"akiyo_qcif.y4m"},
+    {"id":"bus","split":"calibration","url":"https://media.xiph.org/video/derf/y4m/bus_qcif_15fps.y4m","filename":"bus_qcif_15fps.y4m"},
+    {"id":"container","split":"calibration","url":"https://media.xiph.org/video/derf/y4m/container_qcif.y4m","filename":"container_qcif.y4m"},
+    {"id":"foreman","split":"calibration","url":"https://media.xiph.org/video/derf/y4m/foreman_qcif.y4m","filename":"foreman_qcif.y4m"},
+    {"id":"news","split":"legacy_check","url":"https://media.xiph.org/video/derf/y4m/news_qcif.y4m","filename":"news_qcif.y4m"},
+    {"id":"soccer","split":"legacy_check","url":"https://media.xiph.org/video/derf/y4m/soccer_qcif_15fps.y4m","filename":"soccer_qcif_15fps.y4m"},
+    {"id":"carphone","split":"novel_heldout","url":"https://media.xiph.org/video/derf/y4m/carphone_qcif.y4m","filename":"carphone_qcif.y4m"},
+    {"id":"coastguard","split":"novel_heldout","url":"https://media.xiph.org/video/derf/y4m/coastguard_qcif.y4m","filename":"coastguard_qcif.y4m"},
+    {"id":"hall_monitor","split":"novel_heldout","url":"https://media.xiph.org/video/derf/y4m/hall_monitor_qcif.y4m","filename":"hall_monitor_qcif.y4m"},
+    {"id":"mobile","split":"novel_heldout","url":"https://media.xiph.org/video/derf/y4m/mobile_qcif.y4m","filename":"mobile_qcif.y4m"},
+    {"id":"mother_daughter","split":"novel_heldout","url":"https://media.xiph.org/video/derf/y4m/mother_daughter_qcif.y4m","filename":"mother_daughter_qcif.y4m"},
+    {"id":"silent","split":"novel_heldout","url":"https://media.xiph.org/video/derf/y4m/silent_qcif.y4m","filename":"silent_qcif.y4m"}
+  ]
+}
