@@ -1,0 +1,25 @@
+{
+  "schema": "athena.repository-contract-receipt/v2",
+  "repository": "demeet2k/autoresearch",
+  "resource": "athena.repo.autoresearch",
+  "verdict": "PROPOSED",
+  "base_commit": "f032120010c570e56451023a8b28a26f401850d8",
+  "contract_commit": "c04253e7f4e39c7cb30238cf925535bbb51360c7",
+  "control_commit": "3d33fbcd6248fc2dc2991fbbab5e93a7eb184246",
+  "checked": [
+    ".athena/repo.json",
+    ".athena/exports.jsonl",
+    ".athena/imports.lock.json",
+    ".athena/edges.jsonl",
+    ".athena/status.json",
+    "RETURN.md"
+  ],
+  "invariants": {
+    "existing_code_changed": false,
+    "existing_history_rewritten": false,
+    "control_import_is_immutable": true,
+    "forward_edge_has_return": true,
+    "promotion_claimed": false
+  },
+  "next": "Pin the completed proposal head in the Athena federation lock."
+}
