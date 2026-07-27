@@ -1,0 +1,30 @@
+{
+  "repository_id": "athena.repo.autoresearch",
+  "github": "demeet2k/autoresearch",
+  "role": "experiment",
+  "authority_domain": "experimental-witness",
+  "default_branch": "master",
+  "release": "contract-proposal-0.1.0",
+  "manifest_cid": null,
+  "entrypoints": [
+    "README.md"
+  ],
+  "build": null,
+  "test": null,
+  "exports": [
+    "athena.repo.autoresearch@contract-proposal-0.1.0"
+  ],
+  "imports": [
+    "athena.repo.control@git:3d33fbcd6248fc2dc2991fbbab5e93a7eb184246"
+  ],
+  "coordinates": [
+    "athena://resource/athena.repo.autoresearch@contract-proposal-0.1.0",
+    "github://demeet2k/autoresearch@f032120010c570e56451023a8b28a26f401850d8/README.md"
+  ],
+  "return": {
+    "human": "RETURN.md",
+    "machine": ".athena/edges.jsonl",
+    "class": "compensated"
+  },
+  "privacy": "public"
+}

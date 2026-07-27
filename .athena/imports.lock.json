@@ -1,0 +1,14 @@
+{
+  "schema": "athena.import-lock/v2",
+  "federation_release": "v2-proposal-0.1.0",
+  "imports": [
+    {
+      "rid": "athena.repo.control",
+      "vid": "git:3d33fbcd6248fc2dc2991fbbab5e93a7eb184246",
+      "source": "github://demeet2k/Athena@3d33fbcd6248fc2dc2991fbbab5e93a7eb184246/.athena/repo.json",
+      "source_version": "git:3d33fbcd6248fc2dc2991fbbab5e93a7eb184246",
+      "federation_release": "v2-proposal-0.1.0",
+      "availability": "available"
+    }
+  ]
+}
