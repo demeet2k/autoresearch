@@ -1,0 +1,14 @@
+{
+  "schema": "athena.repo-status/v2",
+  "state": "WITNESS_ONLY_UNTIL_PROMOTED",
+  "role": "experiment",
+  "base_commit": "f032120010c570e56451023a8b28a26f401850d8",
+  "control_commit": "3d33fbcd6248fc2dc2991fbbab5e93a7eb184246",
+  "contract_release": "contract-proposal-0.1.0",
+  "promotion_ready": false,
+  "open_defects": [
+    "Experiment outputs are evidence, not canonical memory.",
+    "Promotion requires preregistered receipts and control-plane admission."
+  ],
+  "next_gate": "Admit this contract into a pinned Athena federation release."
+}
