@@ -1,0 +1,52 @@
+{
+  "authority_domain": [
+    "experiments",
+    "benchmarks",
+    "proposed-receipts"
+  ],
+  "build": {
+    "command": null,
+    "status": "unknown"
+  },
+  "contract_release": "KC144.MYC.P04.DRAFT1",
+  "current_version": "git:f032120",
+  "default_branch": "master",
+  "entry_points": [
+    "README.md"
+  ],
+  "federation_status": "declared",
+  "kc_projections": [
+    "KC27.EXPERIMENT",
+    "IC10.WITNESS"
+  ],
+  "privacy": {
+    "contract_public": true,
+    "raw_corpus_allowed": false,
+    "secrets_allowed": false
+  },
+  "repository": "demeet2k/autoresearch",
+  "repository_id": "1184934484",
+  "return": {
+    "allowed_defect": [
+      "experiment-unpromoted"
+    ],
+    "class": "provenance_only",
+    "required_carry": [
+      "experiment_id",
+      "code_commit",
+      "inputs",
+      "metrics",
+      "failure_states"
+    ],
+    "target": "athena://resource/athena.federation.root@2.0.0-p04"
+  },
+  "role": "experiment-witness",
+  "schema": "athena.repository-portal/v2",
+  "source_commit": "f032120010c570e56451023a8b28a26f401850d8",
+  "successor_seed": "P05::EXPERIMENT-RECEIPT-ADMISSION",
+  "test": {
+    "command": null,
+    "status": "unknown"
+  },
+  "visibility": "public"
+}

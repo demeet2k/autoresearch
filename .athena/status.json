@@ -1,0 +1,58 @@
+{
+  "contract_release": "KC144.MYC.P04.DRAFT1",
+  "defects": [
+    "experiment-unpromoted"
+  ],
+  "gates": {
+    "I01_identity": {
+      "verdict": "PASS",
+      "witness": "repository_id:1184934484"
+    },
+    "I02_type_normalization": {
+      "verdict": "PASS",
+      "witness": "athena.repository-portal/v2"
+    },
+    "I03_source_provenance": {
+      "verdict": "PASS",
+      "witness": "f032120010c570e56451023a8b28a26f401850d8"
+    },
+    "I04_carrier_preconditions": {
+      "verdict": "PASS",
+      "witness": "athena.repository-portal/v2"
+    },
+    "I05_invariant_preservation": {
+      "verdict": "HOLD",
+      "witness": null
+    },
+    "I06_defect_boundary": {
+      "verdict": "PASS",
+      "witness": [
+        "experiment-unpromoted"
+      ]
+    },
+    "I07_return": {
+      "verdict": "PASS",
+      "witness": "RETURN.md"
+    },
+    "I08_replay": {
+      "verdict": "HOLD",
+      "witness": null
+    },
+    "I09_authority_policy": {
+      "verdict": "PASS",
+      "witness": [
+        "experiments",
+        "benchmarks",
+        "proposed-receipts"
+      ]
+    },
+    "I10_migration_successor": {
+      "verdict": "HOLD",
+      "witness": "P05::EXPERIMENT-RECEIPT-ADMISSION"
+    }
+  },
+  "repository": "demeet2k/autoresearch",
+  "schema": "athena.repository-status/v2",
+  "successor_seed": "P05::EXPERIMENT-RECEIPT-ADMISSION",
+  "verdict": "HOLD[PORTAL_BRANCH_UNMERGED,RUNTIME_REPLAY_UNWITNESSED]"
+}

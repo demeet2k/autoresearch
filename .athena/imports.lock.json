@@ -1,0 +1,14 @@
+{
+  "federation_release": "KC144.MYC.P04.DRAFT1",
+  "imports": [
+    {
+      "manifest_cid": "bfe61f3d94eba4eccffd98af7d10c57cd3b5f9f0f4a26c415877b3192b63705f",
+      "registry_commit": "43479f458079ce52ce9323c46566b7f9982323fd",
+      "repository": "demeet2k/Athena",
+      "rid": "athena.federation.root",
+      "vid": "2.0.0-p04"
+    }
+  ],
+  "registry_commit": "43479f458079ce52ce9323c46566b7f9982323fd",
+  "schema": "athena.repository-imports-lock/v2"
+}
