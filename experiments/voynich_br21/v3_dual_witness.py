@@ -12,10 +12,10 @@ import hashlib
 import json
 import math
 import re
-from collections import Counter, defaultdict
-from dataclasses import asdict, dataclass
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 EPS = 1e-12
 FAMS = ("D", "O", "S", "QO")
@@ -39,6 +39,7 @@ TAG_RE = re.compile(r"<[^>]*>")
 HIGH_RE = re.compile(r"@\d+;")
 TOKEN_RE = re.compile(r"^[a-z]+$")
 
+
 @dataclass(frozen=True)
 class Line:
     witness: str
@@ -56,6 +57,7 @@ class Line:
     hand: str
     illustration: str
     section: str
+
 
 @dataclass(frozen=True)
 class Record:
@@ -186,56 +188,119 @@ def records(lines: Sequence[Line], mode: str, bins: int = 5) -> list[Record]:
     return out
 
 
-def clip(p: float) -> float: return min(1-EPS, max(EPS, p))
+def clip(p: float) -> float:
+    return min(1-EPS, max(EPS, p))
 
 
 def bit_value(fam: str, partition: str) -> int:
     return 0 if fam in PARTITIONS[partition] else 1
 
 
-def estimate(train: Sequence[Record], target: Record, partition: str, alpha: float = 4.0, use_remainder: bool = True) -> float:
-    vals = [(r, bit_value(r.family, partition)) for r in train]
-    g = (sum(v for _,v in vals) + alpha) / (len(vals) + 2*alpha)
-    def smooth(items, prior): return (sum(v for _,v in items) + alpha*prior) / (len(items)+alpha)
-    pos = [(r,v) for r,v in vals if r.position_bin == target.position_bin]
-    meta = [(r,v) for r,v in vals if (r.section,r.language,r.hand)==(target.section,target.language,target.hand)]
-    pp = smooth(pos,g) if pos else g
-    pm = smooth(meta,g) if meta else g
-    if not use_remainder: return clip((pp+pm+g)/3)
-    rem = [(r,v) for r,v in vals if r.remainder == target.remainder]
-    pr = smooth(rem,g) if rem else g
-    joint = [(r,v) for r,v in vals if r.remainder==target.remainder and r.position_bin==target.position_bin]
-    pj = smooth(joint,(pr+pp)/2) if joint else (pr+pp)/2
-    return clip((2*pj + pr + pp + pm + g)/6)
+def _inc(table: dict, key, y: int) -> None:
+    row = table.setdefault(key, [0, 0])
+    row[0] += 1
+    row[1] += y
 
 
-def score_class(train: Sequence[Record], test: Sequence[Record], cls: str, use_remainder: bool = True) -> float:
-    loss = 0.0
+def _sub(total: dict, held: dict, key) -> tuple[int, int]:
+    a = total.get(key, (0, 0))
+    b = held.get(key, (0, 0))
+    return a[0] - b[0], a[1] - b[1]
+
+
+@dataclass
+class CountIndex:
+    partition: str
+    group_of: Callable[[Record], str]
+    global_count: list[int]
+    group_global: dict[str, list[int]]
+    pos: dict[int, list[int]]
+    group_pos: dict[str, dict[int, list[int]]]
+    meta: dict[tuple[str, str, str], list[int]]
+    group_meta: dict[str, dict[tuple[str, str, str], list[int]]]
+    rem: dict[str, list[int]]
+    group_rem: dict[str, dict[str, list[int]]]
+    joint: dict[tuple[str, int], list[int]]
+    group_joint: dict[str, dict[tuple[str, int], list[int]]]
+
+
+def build_index(recs: Sequence[Record], partition: str, group: Callable[[Record], str]) -> CountIndex:
+    idx = CountIndex(partition, group, [0, 0], {}, {}, {}, {}, {}, {}, {}, {}, {})
+    for r in recs:
+        g = group(r)
+        y = bit_value(r.family, partition)
+        idx.global_count[0] += 1
+        idx.global_count[1] += y
+        _inc(idx.group_global, g, y)
+        _inc(idx.pos, r.position_bin, y)
+        _inc(idx.group_pos.setdefault(g, {}), r.position_bin, y)
+        mk = (r.section, r.language, r.hand)
+        _inc(idx.meta, mk, y)
+        _inc(idx.group_meta.setdefault(g, {}), mk, y)
+        _inc(idx.rem, r.remainder, y)
+        _inc(idx.group_rem.setdefault(g, {}), r.remainder, y)
+        jk = (r.remainder, r.position_bin)
+        _inc(idx.joint, jk, y)
+        _inc(idx.group_joint.setdefault(g, {}), jk, y)
+    return idx
+
+
+def indexed_probability(idx: CountIndex, target: Record, held_group: str, *, alpha: float = 4.0, use_remainder: bool = True) -> float:
+    hg = idx.group_global.get(held_group, (0, 0))
+    n = idx.global_count[0] - hg[0]
+    ones = idx.global_count[1] - hg[1]
+    p_global = (ones + alpha) / (n + 2 * alpha)
+
+    def smooth(pair: tuple[int, int], prior: float) -> float:
+        count, one_count = pair
+        return (one_count + alpha * prior) / (count + alpha)
+
+    pos_pair = _sub(idx.pos, idx.group_pos.get(held_group, {}), target.position_bin)
+    p_pos = smooth(pos_pair, p_global) if pos_pair[0] else p_global
+    mk = (target.section, target.language, target.hand)
+    meta_pair = _sub(idx.meta, idx.group_meta.get(held_group, {}), mk)
+    p_meta = smooth(meta_pair, p_global) if meta_pair[0] else p_global
+    if not use_remainder:
+        return clip((p_pos + p_meta + p_global) / 3)
+    rem_pair = _sub(idx.rem, idx.group_rem.get(held_group, {}), target.remainder)
+    p_rem = smooth(rem_pair, p_global) if rem_pair[0] else p_global
+    jk = (target.remainder, target.position_bin)
+    joint_pair = _sub(idx.joint, idx.group_joint.get(held_group, {}), jk)
+    p_joint = smooth(joint_pair, (p_rem + p_pos) / 2) if joint_pair[0] else (p_rem + p_pos) / 2
+    return clip((2 * p_joint + p_rem + p_pos + p_meta + p_global) / 6)
+
+
+def cv_scores(recs: Sequence[Record], group: Callable[[Record], str], use_remainder: bool = True) -> dict[str, float]:
+    if not recs:
+        return {name: float("inf") for name in CLASSES}
+    indices = {part: build_index(recs, part, group) for part in PARTITIONS}
+    part_loss = {part: 0.0 for part in PARTITIONS}
+    for r in recs:
+        held = group(r)
+        for part, idx in indices.items():
+            p = indexed_probability(idx, r, held, use_remainder=use_remainder)
+            y = bit_value(r.family, part)
+            part_loss[part] -= math.log(p if y else 1-p)
+    return {cls: sum(part_loss[part] for part in parts) / len(recs) for cls, parts in CLASSES.items()}
+
+
+def cross_witness(recs: Sequence[Record], use_remainder: bool = True) -> dict[str, dict[str, float]]:
+    if len({r.witness for r in recs}) < 2:
+        return {}
+    return {f"train_other_test_{w}": _cross_one(recs, w, use_remainder=use_remainder) for w in sorted({r.witness for r in recs})}
+
+
+def _cross_one(recs: Sequence[Record], held_witness: str, *, use_remainder: bool) -> dict[str, float]:
+    group = lambda r: r.witness
+    indices = {part: build_index(recs, part, group) for part in PARTITIONS}
+    test = [r for r in recs if r.witness == held_witness]
+    part_loss = {part: 0.0 for part in PARTITIONS}
     for r in test:
-        for part in CLASSES[cls]:
-            p = estimate(train,r,part,use_remainder=use_remainder)
-            y = bit_value(r.family,part)
-            loss -= math.log(p if y else 1-p)
-    return loss / max(1,len(test))
-
-
-def cv_scores(recs: Sequence[Record], group: Callable[[Record], str], use_remainder: bool = True) -> dict[str,float]:
-    groups = sorted({group(r) for r in recs})
-    total = {k:0.0 for k in CLASSES}; weight = 0
-    for g in groups:
-        train=[r for r in recs if group(r)!=g]; test=[r for r in recs if group(r)==g]
-        if not train or not test: continue
-        for cls in CLASSES: total[cls]+=score_class(train,test,cls,use_remainder)*len(test)
-        weight += len(test)
-    return {k:v/max(1,weight) for k,v in total.items()}
-
-
-def cross_witness(recs: Sequence[Record], use_remainder: bool=True) -> dict[str,dict[str,float]]:
-    ws=sorted({r.witness for r in recs}); out={}
-    for w in ws:
-        train=[r for r in recs if r.witness!=w]; test=[r for r in recs if r.witness==w]
-        if train and test: out[f"train_other_test_{w}"]={c:score_class(train,test,c,use_remainder) for c in CLASSES}
-    return out
+        for part, idx in indices.items():
+            p = indexed_probability(idx, r, held_witness, use_remainder=use_remainder)
+            y = bit_value(r.family, part)
+            part_loss[part] -= math.log(p if y else 1-p)
+    return {cls: sum(part_loss[part] for part in parts) / max(1, len(test)) for cls, parts in CLASSES.items()}
 
 
 def rank(scores: Mapping[str,float], cls: str="AB") -> int:
@@ -245,11 +310,7 @@ def rank(scores: Mapping[str,float], cls: str="AB") -> int:
 def family_metrics(recs: Sequence[Record]) -> dict:
     by=defaultdict(list)
     for r in recs: by[r.family].append(r)
-    return {f:{
-        "n":len(xs), "mean_position":sum(x.position for x in xs)/len(xs),
-        "initial_rate":sum(x.initial for x in xs)/len(xs),
-        "terminal_rate":sum(x.terminal for x in xs)/len(xs),
-    } for f,xs in sorted(by.items()) if xs}
+    return {f:{"n":len(xs), "mean_position":sum(x.position for x in xs)/len(xs), "initial_rate":sum(x.initial for x in xs)/len(xs), "terminal_rate":sum(x.terminal for x in xs)/len(xs)} for f,xs in sorted(by.items()) if xs}
 
 
 def same_remainder_order(recs: Sequence[Record]) -> dict[str,dict]:
@@ -269,9 +330,7 @@ def align(zl: Sequence[Line], it: Sequence[Line]) -> dict:
     a={x.locus:x for x in zl}; b={x.locus:x for x in it}; common=sorted(set(a)&set(b))
     exact=sum(a[k].text_clean==b[k].text_clean for k in common)
     token_exact=sum(a[k].tokens==b[k].tokens for k in common)
-    return {"zl_lines":len(zl),"it_lines":len(it),"common_loci":len(common),
-            "exact_clean_line_rate":exact/len(common) if common else None,
-            "exact_token_sequence_rate":token_exact/len(common) if common else None}
+    return {"zl_lines":len(zl),"it_lines":len(it),"common_loci":len(common), "exact_clean_line_rate":exact/len(common) if common else None, "exact_token_sequence_rate":token_exact/len(common) if common else None}
 
 
 def q_scope(lines: Sequence[Line]) -> dict:
@@ -285,17 +344,12 @@ def q_scope(lines: Sequence[Line]) -> dict:
 
 def source_report(path: Path, expected: str|None) -> dict:
     actual=sha256(path)
-    return {"path":str(path),"bytes":path.stat().st_size,"sha256":actual,
-            "expected_sha256":expected,"hash_verified":actual==expected if expected else None}
+    return {"path":str(path),"bytes":path.stat().st_size,"sha256":actual, "expected_sha256":expected,"hash_verified":actual==expected if expected else None}
 
 
 def render_md(report: dict) -> str:
     s=report["summary"]
-    lines=["# Voynich × BR21 V3 dual-witness report","",f"**Disposition:** `{s['disposition']}`","",
-           f"ZL strict paragraph lines: **{report['alignment']['zl_lines']:,}**  ",
-           f"IT strict paragraph lines: **{report['alignment']['it_lines']:,}**  ",
-           f"Common loci: **{report['alignment']['common_loci']:,}**  ",
-           "", "## Factorization ranks", "", "| parser | corpus | AB rank | winner |", "|---|---:|---:|---|"]
+    lines=["# Voynich × BR21 V3 dual-witness report","",f"**Disposition:** `{s['disposition']}`","", f"ZL strict paragraph lines: **{report['alignment']['zl_lines']:,}**  ", f"IT strict paragraph lines: **{report['alignment']['it_lines']:,}**  ", f"Common loci: **{report['alignment']['common_loci']:,}**  ", "", "## Factorization ranks", "", "| parser | corpus | AB rank | winner |", "|---|---:|---:|---|"]
     for mode,m in report["models"].items():
         for corpus,x in m.items():
             if not isinstance(x,dict) or "scores" not in x: continue
@@ -316,9 +370,7 @@ def run(args) -> dict:
         for name,rr in (("ZL3b",rz),("IT",ri),("pooled",rp)):
             scores=cv_scores(rr,lambda r:r.folio)
             position_only=cv_scores(rr,lambda r:r.folio,use_remainder=False)
-            corp[name]={"records":len(rr),"folios":len({r.folio for r in rr}),"scores":scores,
-                        "position_only_scores":position_only,"ab_rank":rank(scores),
-                        "family_metrics":family_metrics(rr),"same_remainder_order":same_remainder_order(rr)}
+            corp[name]={"records":len(rr),"folios":len({r.folio for r in rr}),"scores":scores, "position_only_scores":position_only,"ab_rank":rank(scores), "family_metrics":family_metrics(rr),"same_remainder_order":same_remainder_order(rr)}
         corp["cross_witness"]={"scores":cross_witness(rp)}
         models[mode]=corp
         stable.append(all(corp[n]["ab_rank"]==1 for n in ("ZL3b","IT","pooled")))
@@ -326,12 +378,9 @@ def run(args) -> dict:
     if not sources["ZL3b"]["hash_verified"]: obligations.append("ZL3b hash mismatch.")
     if args.it_sha and not sources["IT"]["hash_verified"]: obligations.append("IT hash mismatch.")
     if not all(stable): obligations.append("AB factorization is not first in every witness/parser chart.")
-    if models["strict_she"]["pooled"]["family_metrics"].get("S",{}).get("n",0)<100:
-        obligations.append("Strict-S family support remains sparse.")
+    if models["strict_she"]["pooled"]["family_metrics"].get("S",{}).get("n",0)<100: obligations.append("Strict-S family support remains sparse.")
     disposition="NEAR" if not obligations and all(stable) else "AMBIG" if all(stable) else "HOLD"
-    report={"schema":"VBR.DUAL_WITNESS.v3","sources":sources,"alignment":align(zl,it),
-            "q_scope":{"ZL3b":q_scope(zl),"IT":q_scope(it)},"models":models,
-            "summary":{"disposition":disposition,"all_parser_witness_ab_first":all(stable),"obligations":obligations}}
+    report={"schema":"VBR.DUAL_WITNESS.v3","sources":sources,"alignment":align(zl,it), "q_scope":{"ZL3b":q_scope(zl),"IT":q_scope(it)},"models":models, "summary":{"disposition":disposition,"all_parser_witness_ab_first":all(stable),"obligations":obligations}}
     payload=json.dumps(report,sort_keys=True,separators=(",",":"))
     report["receipt_sha256"]=hashlib.sha256(payload.encode()).hexdigest()
     return report
@@ -345,6 +394,8 @@ def self_test() -> None:
         assert len(ls)==2 and len(rs)==8
         assert AB_SIGNATURE == (("D","O"),("D","S"))
         assert q_scope(ls)["qo_given_q"]==1.0
+        scores=cv_scores(rs,lambda r:r.folio)
+        assert set(scores)==set(CLASSES)
     finally: p.unlink(missing_ok=True)
 
 
