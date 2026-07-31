@@ -1,0 +1,65 @@
+name: Voynich Six-Family V4
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  six-family:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download and verify pinned witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/voynich reports_v4
+          BASE="https://raw.githubusercontent.com/noah-chelednik/voynich-data/472ef7366606a799fc8f1044c037e06b413f6ddd/data_sources/cache"
+          curl -fL --retry 5 --retry-all-errors "$BASE/ZL3b-n.txt" -o data/voynich/ZL3b-n.txt
+          curl -fL --retry 5 --retry-all-errors "$BASE/IT_ivtff_1a.txt" -o data/voynich/IT_ivtff_1a.txt
+          echo "bf5b6d4ac1e3a51b1847a9c388318d609020441ccd56984c901c32b09beccafc  data/voynich/ZL3b-n.txt" | sha256sum -c -
+          echo "db624a731114f26854bbfe3a59d40827fa8911be46d086b6c558d99e557241ee  data/voynich/IT_ivtff_1a.txt" | sha256sum -c -
+          sha256sum data/voynich/*.txt | tee reports_v4/source_hashes.txt
+
+      - name: Six-family parser self-test
+        run: python experiments/voynich_br21/v4_six_family.py --self-test
+
+      - name: Pinned ZL3b × IT1a six-family tournament
+        run: |
+          python experiments/voynich_br21/v4_six_family.py \
+            --zl data/voynich/ZL3b-n.txt \
+            --it data/voynich/IT_ivtff_1a.txt \
+            --zl-sha bf5b6d4ac1e3a51b1847a9c388318d609020441ccd56984c901c32b09beccafc \
+            --it-sha db624a731114f26854bbfe3a59d40827fa8911be46d086b6c558d99e557241ee \
+            --json reports_v4/pinned_six_family.json \
+            --markdown reports_v4/pinned_six_family.md
+
+      - name: Current ZL3b × IT2a six-family tournament
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 5 --retry-all-errors "https://www.voynich.nu/data/IT2a-n.txt" -o data/voynich/IT2a-n.txt
+          sha256sum data/voynich/IT2a-n.txt | tee reports_v4/it2a_observed_hash.txt
+          python experiments/voynich_br21/v4_six_family.py \
+            --zl data/voynich/ZL3b-n.txt \
+            --it data/voynich/IT2a-n.txt \
+            --zl-sha bf5b6d4ac1e3a51b1847a9c388318d609020441ccd56984c901c32b09beccafc \
+            --json reports_v4/current_six_family.json \
+            --markdown reports_v4/current_six_family.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voynich-six-family-v4
+          path: reports_v4/
+          retention-days: 30
