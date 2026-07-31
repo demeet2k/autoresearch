@@ -32,6 +32,19 @@ jobs:
           echo "db624a731114f26854bbfe3a59d40827fa8911be46d086b6c558d99e557241ee  data/voynich/IT_ivtff_1a.txt" | sha256sum -c -
           sha256sum data/voynich/*.txt | tee reports/source_hashes.txt
 
+      - name: Patch nested cross-witness Markdown rendering
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('experiments/voynich_br21/v3_dual_witness.py')
+          text = path.read_text()
+          old = 'if not isinstance(x,dict) or "scores" not in x: continue'
+          new = 'if not isinstance(x,dict) or "scores" not in x or not all(isinstance(v,(int,float)) for v in x["scores"].values()): continue'
+          if old not in text:
+              raise SystemExit('expected renderer line not found')
+          path.write_text(text.replace(old, new))
+          PY
+
       - name: Parser self-test
         run: python experiments/voynich_br21/v3_dual_witness.py --self-test
 
