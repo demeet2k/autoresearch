@@ -1,0 +1,90 @@
+name: Voynich S-Surface Partition Scout
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  partition-scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download and verify witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/voynich reports_partition_scout
+          BASE="https://raw.githubusercontent.com/noah-chelednik/voynich-data/472ef7366606a799fc8f1044c037e06b413f6ddd/data_sources/cache"
+          curl -fL --retry 5 --retry-all-errors "$BASE/ZL3b-n.txt" -o data/voynich/ZL3b-n.txt
+          curl -fL --retry 5 --retry-all-errors "$BASE/IT_ivtff_1a.txt" -o data/voynich/IT_ivtff_1a.txt
+          curl -fL --retry 5 --retry-all-errors "https://www.voynich.nu/data/IT2a-n.txt" -o data/voynich/IT2a-n.txt
+          echo "bf5b6d4ac1e3a51b1847a9c388318d609020441ccd56984c901c32b09beccafc  data/voynich/ZL3b-n.txt" | sha256sum -c -
+          echo "db624a731114f26854bbfe3a59d40827fa8911be46d086b6c558d99e557241ee  data/voynich/IT_ivtff_1a.txt" | sha256sum -c -
+
+      - name: Run partition scout
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, json, sys
+          sys.path.insert(0,'experiments/voynich_br21')
+          import v3_dual_witness as v3
+          import v4_six_family as v4
+
+          pairs={
+            'pinned':('data/voynich/ZL3b-n.txt','data/voynich/IT_ivtff_1a.txt'),
+            'current':('data/voynich/ZL3b-n.txt','data/voynich/IT2a-n.txt'),
+          }
+          result={'schema':'VBR.S_SURFACE.PARTITION_SCOUT.v1','pairs':{}}
+          tests=(
+            ('folio',lambda z:z.folio,True),
+            ('position_only',lambda z:z.folio,False),
+            ('witness',lambda z:z.witness,True),
+            ('remainder',lambda z:z.remainder,True),
+            ('section',lambda z:z.section,True),
+            ('hand',lambda z:f'{z.witness}:{z.hand}',True),
+          )
+          for pair,(zp,ip) in pairs.items():
+            zl=v3.parse_ivtff(Path(zp),'ZL3b',True)
+            it=v3.parse_ivtff(Path(ip),'IT',True)
+            pr={}
+            for mode in ('primitive','s_scope','sh_scope'):
+              rs=v4.make_records(zl,mode)+v4.make_records(it,mode)
+              mr={'records':len(rs),'metrics':v4.metrics(rs),'overlap':v4.overlap(rs),'tests':{}}
+              for name,group,use_rem in tests:
+                scores,_=v4.part_eval(rs,group,use_rem)
+                mr['tests'][name]=[
+                  {'partition':part,'loss':loss}
+                  for part,loss in sorted(scores.items(),key=lambda x:x[1])[:12]
+                ]
+              pr[mode]=mr
+            result['pairs'][pair]=pr
+          raw=json.dumps(result,sort_keys=True,separators=(',',':'))
+          result['receipt_sha256']=hashlib.sha256(raw.encode()).hexdigest()
+          Path('reports_partition_scout/partition_scout.json').write_text(json.dumps(result,indent=2,sort_keys=True))
+          lines=['# Voynich S-Surface Partition Scout','',f"Receipt: `{result['receipt_sha256']}`",'']
+          for pair,pr in result['pairs'].items():
+            lines += [f'## {pair}','', '| mode | test | best partition | loss |','|---|---|---|---:|']
+            for mode,mr in pr.items():
+              for test,rows in mr['tests'].items():
+                b=rows[0]; lines.append(f"| {mode} | {test} | `{b['partition']}` | {b['loss']:.6f} |")
+            lines.append('')
+          Path('reports_partition_scout/partition_scout.md').write_text('\n'.join(lines)+'\n')
+          print(json.dumps({'receipt':result['receipt_sha256']},indent=2))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voynich-s-surface-partition-scout
+          path: reports_partition_scout/
+          retention-days: 30

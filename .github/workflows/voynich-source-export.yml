@@ -1,0 +1,34 @@
+name: Voynich Verified Source Export
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download and verify source witnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          BASE="https://raw.githubusercontent.com/noah-chelednik/voynich-data/472ef7366606a799fc8f1044c037e06b413f6ddd/data_sources/cache"
+          curl -fL --retry 5 --retry-all-errors "$BASE/ZL3b-n.txt" -o source/ZL3b-n.txt
+          curl -fL --retry 5 --retry-all-errors "$BASE/IT_ivtff_1a.txt" -o source/IT_ivtff_1a.txt
+          curl -fL --retry 5 --retry-all-errors "https://www.voynich.nu/data/IT2a-n.txt" -o source/IT2a-n.txt
+          echo "bf5b6d4ac1e3a51b1847a9c388318d609020441ccd56984c901c32b09beccafc  source/ZL3b-n.txt" | sha256sum -c -
+          echo "db624a731114f26854bbfe3a59d40827fa8911be46d086b6c558d99e557241ee  source/IT_ivtff_1a.txt" | sha256sum -c -
+          sha256sum source/*.txt > source/SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voynich-verified-source-witnesses
+          path: source/
+          retention-days: 7
