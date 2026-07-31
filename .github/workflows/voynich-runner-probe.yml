@@ -1,0 +1,28 @@
+name: Voynich runner probe
+
+on:
+  push:
+    branches:
+      - voynich-runner-probe-20260731
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Runner admitted
+        run: |
+          set -euo pipefail
+          echo "runner=github-hosted"
+          python --version
+          uname -a
+          printf '%s\n' '{"status":"PASS","probe":"voynich-runner"}' > runner-probe.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voynich-runner-probe
+          path: runner-probe.json
+          retention-days: 7
