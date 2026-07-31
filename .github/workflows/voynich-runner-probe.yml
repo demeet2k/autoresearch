@@ -1,9 +1,6 @@
-name: Voynich runner probe
+name: Voynich BR21 Source V3 Hosted
 
 on:
-  push:
-    branches:
-      - voynich-runner-probe-20260731
   pull_request:
     branches:
       - master
@@ -13,19 +10,59 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  dual-witness:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
-      - name: Runner admitted
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download and verify pinned witnesses
+        shell: bash
         run: |
           set -euo pipefail
-          echo "runner=github-hosted"
-          python --version
-          uname -a
-          printf '%s\n' '{"status":"PASS","probe":"voynich-runner"}' > runner-probe.json
+          mkdir -p data/voynich reports
+          BASE="https://raw.githubusercontent.com/noah-chelednik/voynich-data/472ef7366606a799fc8f1044c037e06b413f6ddd/data_sources/cache"
+          curl -fL --retry 5 --retry-all-errors "$BASE/ZL3b-n.txt" -o data/voynich/ZL3b-n.txt
+          curl -fL --retry 5 --retry-all-errors "$BASE/IT_ivtff_1a.txt" -o data/voynich/IT_ivtff_1a.txt
+          echo "bf5b6d4ac1e3a51b1847a9c388318d609020441ccd56984c901c32b09beccafc  data/voynich/ZL3b-n.txt" | sha256sum -c -
+          echo "db624a731114f26854bbfe3a59d40827fa8911be46d086b6c558d99e557241ee  data/voynich/IT_ivtff_1a.txt" | sha256sum -c -
+          sha256sum data/voynich/*.txt | tee reports/source_hashes.txt
+
+      - name: Parser self-test
+        run: python experiments/voynich_br21/v3_dual_witness.py --self-test
+
+      - name: Full pinned ZL3b × IT1a tournament
+        run: |
+          python experiments/voynich_br21/v3_dual_witness.py \
+            --zl data/voynich/ZL3b-n.txt \
+            --it data/voynich/IT_ivtff_1a.txt \
+            --zl-sha bf5b6d4ac1e3a51b1847a9c388318d609020441ccd56984c901c32b09beccafc \
+            --it-sha db624a731114f26854bbfe3a59d40827fa8911be46d086b6c558d99e557241ee \
+            --json reports/pinned_zl3b_it1a.json \
+            --markdown reports/pinned_zl3b_it1a.md
+
+      - name: Optional current IT2a tournament
+        shell: bash
+        run: |
+          set -uo pipefail
+          if curl -fL --retry 3 --retry-all-errors "https://www.voynich.nu/data/IT2a-n.txt" -o data/voynich/IT2a-n.txt; then
+            sha256sum data/voynich/IT2a-n.txt | tee reports/it2a_observed_hash.txt
+            python experiments/voynich_br21/v3_dual_witness.py \
+              --zl data/voynich/ZL3b-n.txt \
+              --it data/voynich/IT2a-n.txt \
+              --zl-sha bf5b6d4ac1e3a51b1847a9c388318d609020441ccd56984c901c32b09beccafc \
+              --json reports/current_zl3b_it2a.json \
+              --markdown reports/current_zl3b_it2a.md
+          else
+            echo "IT2a download unavailable; pinned dual-witness run remains authoritative." | tee reports/it2a_download_hold.txt
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
-          name: voynich-runner-probe
-          path: runner-probe.json
-          retention-days: 7
+          name: voynich-br21-source-v3-hosted
+          path: reports/
+          retention-days: 30
