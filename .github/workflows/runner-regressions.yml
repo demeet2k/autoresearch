@@ -1,0 +1,38 @@
+name: Runner regressions
+
+on:
+  pull_request:
+    paths:
+      - 'run_enhanced.py'
+      - 'meta_observer_runtime.py'
+      - 'tests/**'
+      - '.github/workflows/runner-regressions.yml'
+  push:
+    paths:
+      - 'run_enhanced.py'
+      - 'meta_observer_runtime.py'
+      - 'tests/**'
+      - '.github/workflows/runner-regressions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runner-regressions:
+    name: Python 3.12 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # These tests use only the standard library and a mocked trainer.
+      # Do not install the GPU training dependencies or invoke train.py.
+      - name: Run offline runner regressions
+        run: python -B -m unittest discover -s tests -v
