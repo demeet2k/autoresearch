@@ -1546,10 +1546,19 @@ class MetaObserver:
         result: dict with keys like {metric_name, metric_value, outcome, ...}
         """
         metric_value = result.get("metric_value", 0.0)
-        prev_metric = self._history[-1].metric_value if self._history else metric_value
-        metric_delta = prev_metric - metric_value  # positive = improvement (lower is better)
-
         outcome = result.get("outcome", "discard")
+        # A failed run's infinity sentinel is not a measured regression. Skip it
+        # when comparing later successful runs, so failure/recovery stays finite.
+        prev_metric = next(
+            (obs.metric_value for obs in reversed(self._history)
+             if obs.outcome != "crash" and math.isfinite(obs.metric_value)),
+            metric_value,
+        )
+        metric_delta = (
+            prev_metric - metric_value
+            if outcome != "crash" and math.isfinite(metric_value)
+            and math.isfinite(prev_metric) else 0.0
+        )
         if outcome == "keep":
             self.experiments_since_improvement = 0
             if metric_value < self.best_metric:
@@ -1854,7 +1863,8 @@ class MetaObserver:
         scores["x8_routing"] = 0.8 if action.get("strategy") else 0.4
 
         # x9: Grounding — do we have solid metrics?
-        has_metric = result.get("metric_value", 0) > 0
+        metric = result.get("metric_value", 0)
+        has_metric = outcome != "crash" and math.isfinite(metric) and metric > 0
         scores["x9_grounding"] = 0.9 if has_metric else 0.2
 
         # x10: Compression — small change, big effect?

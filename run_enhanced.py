@@ -13,6 +13,7 @@ making the agent learn from every cycle rather than just keep/discard.
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -41,12 +42,12 @@ def parse_results(log_path: str) -> dict:
     }
 
     try:
-        with open(log_path, "r") as f:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
 
         # Parse key metrics from output
         patterns = {
-            "val_bpb": r"^val_bpb:\s*([\d.]+)",
+            "val_bpb": r"^val_bpb:[ \t]*([+\-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+\-]?\d+)?)[ \t]*$",
             "peak_vram_mb": r"^peak_vram_mb:\s*([\d.]+)",
             "training_seconds": r"^training_seconds:\s*([\d.]+)",
             "total_tokens_M": r"^total_tokens_M:\s*([\d.]+)",
@@ -60,9 +61,13 @@ def parse_results(log_path: str) -> dict:
             match = re.search(pattern, content, re.MULTILINE)
             if match:
                 result[key] = float(match.group(1))
+                if key == "val_bpb":
+                    result["metric_value"] = result[key]
 
-        if result["metric_value"] < float('inf'):
+        if math.isfinite(result["metric_value"]) and result["metric_value"] >= 0:
             result["outcome"] = "pending"  # Will be set to keep/discard
+        else:
+            result["error"] = "Missing or invalid finite nonnegative val_bpb summary"
 
         # Check for errors
         if "Error" in content or "Traceback" in content:
@@ -217,24 +222,46 @@ def run_experiment(observer: MetaObserver, best_bpb: float,
     log_path = "run.log"
     start_time = time.time()
 
-    train_result = subprocess.run(
-        ["uv", "run", "train.py"],
-        capture_output=True, text=True,
-        timeout=600  # 10 minute hard timeout
-    )
+    training_error = ""
+    returncode = None
+    try:
+        train_result = subprocess.run(
+            ["uv", "run", "train.py"],
+            capture_output=True, text=True,
+            timeout=600  # 10 minute hard timeout
+        )
+        stdout, stderr = train_result.stdout, train_result.stderr
+        returncode = train_result.returncode
+        if returncode != 0:
+            training_error = f"Training exited with status {returncode}"
+    except subprocess.TimeoutExpired as exc:
+        # TimeoutExpired may carry bytes even when text=True was requested.
+        stdout, stderr = exc.stdout, exc.stderr
+        training_error = f"Training timed out after {exc.timeout} seconds"
+    except OSError as exc:
+        stdout, stderr = "", ""
+        training_error = f"Training could not start: {exc}"
 
-    # Write log
-    with open(log_path, "w") as f:
-        f.write(train_result.stdout)
-        if train_result.stderr:
+    def log_text(value):
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        return value or ""
+
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write(log_text(stdout))
+        if stderr:
             f.write("\n--- STDERR ---\n")
-            f.write(train_result.stderr)
+            f.write(log_text(stderr))
 
     elapsed = time.time() - start_time
-
-    # Parse results
     result = parse_results(log_path)
+    result["returncode"] = returncode
+    if training_error:
+        result["outcome"] = "crash"
+        result["error"] = training_error
 
+    # Compare against the incumbent before updating it.
+    previous_best = best_bpb
     # Determine outcome
     if result["outcome"] == "crash":
         outcome = "crash"
@@ -245,7 +272,10 @@ def run_experiment(observer: MetaObserver, best_bpb: float,
         outcome = "discard"
 
     result["outcome"] = outcome
-    result["metric_delta"] = best_bpb - result["metric_value"] if outcome != "crash" else 0
+    result["metric_delta"] = (
+        previous_best - result["metric_value"]
+        if outcome != "crash" and math.isfinite(previous_best) else 0
+    )
 
     # OBSERVE: Feed everything to meta-observer
     obs = observer.observe(
@@ -289,15 +319,14 @@ def run_experiment(observer: MetaObserver, best_bpb: float,
     print(f"  Pattern match: {obs.pattern_match or 'none'}")
     print(f"  Best so far: {best_bpb:.6f} (cycle {observer.best_metric_cycle})")
 
-    # Handle discard: reset git
+    # Keep/discard is an experiment decision, never permission to erase Git
+    # history or local edits. The caller chooses the next candidate explicitly.
     if outcome == "discard":
-        subprocess.run(["git", "reset", "--hard", "HEAD~1"], capture_output=True)
-        print(f"  → Discarded (git reset)")
+        print("  Discarded result; candidate commit and local edits preserved")
     elif outcome == "crash":
-        subprocess.run(["git", "reset", "--hard", "HEAD~1"], capture_output=True)
-        print(f"  → Crashed: {result.get('error', 'unknown')}")
+        print(f"  Crashed: {result.get('error', 'unknown')}; Git state preserved")
     else:
-        print(f"  → KEPT! New best: {best_bpb:.6f}")
+        print(f"  KEPT! New best: {best_bpb:.6f}")
 
     # Periodic report
     if cycle % 10 == 0:

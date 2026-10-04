@@ -145,3 +145,20 @@ The observer monitors GPU utilization, memory pressure, and computational effici
 - Secondary: VRAM usage
 - Tertiary: code simplicity
 - NEW: Meta-observer report quality and learning depth
+
+
+## Enhanced runner safety and local verification
+
+`run_enhanced.py` records `keep`, `discard`, or `crash` without resetting Git or
+restoring files. Candidate commits and local edits remain available for review;
+choose the next candidate explicitly in an isolated experiment branch/worktree.
+Only a finite nonnegative `val_bpb` from a successful process can be kept.
+Nonzero exits, the 600-second timeout, and a missing training launcher are logged
+as crashes, including any partial output available on timeout.
+
+The runner regression suite uses synthetic logs and a mocked trainer, needs only
+Python's standard library, and does not run GPU training or download data:
+
+```sh
+python -B -m unittest discover -s tests -v
+```
